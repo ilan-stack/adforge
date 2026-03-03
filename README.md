@@ -4,6 +4,8 @@ Turn product photos into cinematic video ads using a multi-model AI pipeline.
 
 **Live demo:** [adforge-three.vercel.app](https://adforge-three.vercel.app)
 
+![AdForge Screenshot](screenshot.png)
+
 ## How It Works
 
 AdForge chains three AI models together to go from a single product photo to a polished video ad:
