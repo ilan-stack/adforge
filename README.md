@@ -2,7 +2,7 @@
 
 Turn product photos into cinematic video ads using a multi-model AI pipeline.
 
-**Live demo:** [adforge-three.vercel.app](https://adforge-three.vercel.app)
+**Live demo:** [adforge-three.vercel.app](https://adforge-three.vercel.app) — just upload an image and go, API keys are pre-configured.
 
 ![AdForge Screenshot](screenshot.png)
 
@@ -29,17 +29,74 @@ AdForge chains three AI models together to go from a single product photo to a p
 - **Audio generation** — Optional AI-generated audio for the video
 - **Video Journey preview** — Side-by-side first frame and end frame before generating
 
+## Technical Challenges & Solutions
+
+### CORS & API Proxy
+
+LTX-2's API doesn't support browser-origin requests. Rather than building a backend server, I configured a Vite dev proxy and Vercel rewrites (`vercel.json`) to transparently route `/api/*` to `https://api.ltx.video/v1/*` — keeping the app fully client-side with zero backend code.
+
+### Chained Image Generation for Style Consistency
+
+A naive approach would generate the enhanced first frame and alternate-angle end frame in parallel. The problem: they'd have completely different backgrounds and lighting, making the video transition look jarring.
+
+**Solution:** Chain the calls sequentially — generate the enhanced first frame first, then feed that enhanced image as the source for the alt-angle generation. The alt-angle prompt explicitly instructs Gemini to use the *exact same background, props, and lighting* so both frames feel like they belong in the same scene.
+
+```
+Original Photo → Enhanced First Frame (new background) → Alt Angle End Frame (same background, different angle)
+```
+
+### Context-Aware Prompt Engineering
+
+Early versions used a single "dark studio" background for every product. A children's toy in a dark moody studio looked wrong. The fix: prompts dynamically adapt to the product's personality — toys get playful colorful settings, electronics get sleek modern desks, food gets warm kitchens, etc. This is driven by the Gemini Vision analysis, not hardcoded categories.
+
+### Tone & Audience Flow-Through
+
+The ad tone (Fun/Premium/Urgent) and target audience don't just affect the video — they flow through the entire pipeline:
+
+| Setting | Enhanced First Frame | Alt Angle End Frame | LTX-2 Video Prompt |
+|---------|---------------------|--------------------|--------------------|
+| **Fun** | Bright, colorful, playful lighting | Matches first frame | Warm studio, golden light, colorful bokeh |
+| **Premium** | Dark, elegant, moody lighting | Matches first frame | Moody studio, key light, mist, shallow DOF |
+| **Urgent** | Bold, high-contrast, striking | Matches first frame | High-contrast, dramatic streaks, deep shadows |
+
+The audience text (e.g. "fitness enthusiasts aged 25-35") is injected into every prompt so the AI tailors the aesthetic to the target demographic.
+
+### Auto Model Switching
+
+LTX-2 Pro supports up to 10s of video with higher quality; LTX-2 Fast supports up to 20s. Instead of making users think about model selection, the app auto-switches based on the duration they pick — transparent to the user, optimal for quality.
+
+### Binary Response Handling
+
+LTX-2's API returns raw MP4 bytes directly (not a URL or job ID). The app handles this with `res.blob()` → `URL.createObjectURL()` for instant in-browser playback without any intermediate storage.
+
+## Architecture
+
+```
+Product Photo
+    │
+    ▼
+Gemini Vision (analysis → JSON: product, colors, material, shape, camera, alternate_angle)
+    │
+    ├──▶ Gemini Imagen (enhanced first frame — tone-aware, audience-aware)
+    │        │
+    │        └──▶ Gemini Imagen (alt angle end frame — style-matched to enhanced frame)
+    │
+    ├──▶ Build LTX-2 prompt (tone environment + audience + analysis fields)
+    │
+    ▼
+LTX-2 Video API (image-to-video, binary MP4 response)
+    │
+    ▼
+In-browser video playback + download
+```
+
 ## Tech Stack
 
-- React 19 + TypeScript 5.9
-- Vite 7
-- TailwindCSS 4
-- Gemini API (Vision + Image Generation)
-- LTX Video API by Lightricks
-
-## Try It
-
-Visit the [live demo](https://adforge-three.vercel.app) — API keys are pre-configured, just upload a product image and go.
+- **React 19** + TypeScript 5.9 — single-file architecture (~940 lines), no routing needed
+- **Vite 7** — dev server with API proxy, fast builds
+- **TailwindCSS 4** — utility-first styling, dark theme
+- **Gemini API** — Vision (analysis) + Imagen (image generation), both via REST
+- **LTX Video API** — image-to-video generation by Lightricks
 
 ## Run Locally
 
@@ -48,32 +105,19 @@ npm install
 npm run dev
 ```
 
-Open [localhost:5173](http://localhost:5173). API keys are included for demo purposes. To use your own, click "API Keys" in the header.
-
-## Architecture
-
-```
-Product Photo
-    |
-    v
-Gemini Vision (analysis)
-    |
-    +--> Gemini Imagen (enhanced first frame, tone-aware)
-    |        |
-    |        +--> Gemini Imagen (alt angle end frame, style-matched)
-    |
-    +--> Build LTX-2 prompt (tone + audience + analysis)
-    |
-    v
-LTX-2 Video API (image-to-video)
-    |
-    v
-MP4 Video Ad
-```
+Open [localhost:5173](http://localhost:5173). Demo API keys are included. To use your own, click "API Keys" in the header.
 
 ## Deployment
 
-Deployed on Vercel with API rewrites configured in `vercel.json` to proxy `/api/*` requests to the LTX Video API.
+Deployed on Vercel with API rewrites in `vercel.json`:
+
+```json
+{
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "https://api.ltx.video/v1/:path*" }
+  ]
+}
+```
 
 ```bash
 npm run build
