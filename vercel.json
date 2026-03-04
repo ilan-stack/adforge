@@ -1,8 +1,7 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://api.ltx.video/v1/:path*"
+  "functions": {
+    "api/ltx.ts": {
+      "maxDuration": 300
     }
-  ]
+  }
 }

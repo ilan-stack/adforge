@@ -1,13 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import './index.css'
 
-const LTX_API_BASE = '/api'
-
-// Demo keys — expire March 11 2026
-const DEMO_EXPIRES = new Date('2026-03-12T00:00:00Z').getTime()
-const isDemoActive = () => Date.now() < DEMO_EXPIRES
-const DEMO_LTX_KEY = 'ltxv_cPkaalzltl1YGgYXiU7twVk7mivT8Y-UcwTmkxrTDSbCbqVs-6ILYctTXXHPlW4496kd7zKdBPGBBRhyKQQcZit6DTLbyN57b7pGTajr_hGuGrXX7kgfwbVdUb_LkuTNBV76jxEITTp317zTsOxb4T2GeFE_pNfccU7dMDPmvW-Sk7s'
-const DEMO_GEMINI_KEY = 'AIzaSyB51P_ZpBrFsCXBUpPtY1sH_7qsTWjXqfo'
+// API calls go through Vercel serverless functions — keys stay server-side
 
 type Tone = 'fun' | 'premium' | 'urgent'
 type Status = 'idle' | 'uploading' | 'generating' | 'polling' | 'done' | 'error'
@@ -48,13 +42,13 @@ const CAMERA_MOTIONS = ['dolly_in', 'dolly_out', 'dolly_left', 'dolly_right', 'j
 type CameraMotion = typeof CAMERA_MOTIONS[number]
 
 
-async function analyzeWithGemini(base64Data: string, mimeType: string, geminiKey: string): Promise<ProductAnalysis> {
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+async function analyzeWithGemini(base64Data: string, mimeType: string): Promise<ProductAnalysis> {
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'gemini-2.0-flash',
+      body: {
         contents: [{
           parts: [
             {
@@ -84,9 +78,9 @@ Respond with ONLY valid JSON, no markdown, no backticks:
           temperature: 0.7,
           maxOutputTokens: 500,
         },
-      }),
-    }
-  )
+      },
+    }),
+  })
 
   if (!res.ok) {
     throw new Error(`Gemini API error: ${res.status}`)
@@ -98,14 +92,14 @@ Respond with ONLY valid JSON, no markdown, no backticks:
   return JSON.parse(cleaned)
 }
 
-async function geminiGenerateImage(base64Data: string, mimeType: string, prompt: string, geminiKey: string): Promise<string | null> {
+async function geminiGenerateImage(base64Data: string, mimeType: string, prompt: string): Promise<string | null> {
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+    const res = await fetch('/api/gemini', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gemini-2.0-flash-exp-image-generation',
+        body: {
           contents: [{
             parts: [
               { inline_data: { mime_type: mimeType, data: base64Data } },
@@ -115,9 +109,9 @@ async function geminiGenerateImage(base64Data: string, mimeType: string, prompt:
           generationConfig: {
             responseModalities: ['TEXT', 'IMAGE'],
           },
-        }),
-      }
-    )
+        },
+      }),
+    })
 
     if (!res.ok) {
       console.warn('Gemini image gen failed:', res.status, await res.text().catch(() => ''))
@@ -187,9 +181,6 @@ function buildFallbackPrompt(audience: string, tone: Tone): string {
 }
 
 export default function App() {
-  const [ltxKey, setLtxKey] = useState(() => localStorage.getItem('adforge_ltx_key') || (isDemoActive() ? DEMO_LTX_KEY : ''))
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('adforge_gemini_key') || (isDemoActive() ? DEMO_GEMINI_KEY : ''))
-  const [showSettings, setShowSettings] = useState(false)
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [audience, setAudience] = useState('')
@@ -261,20 +252,20 @@ export default function App() {
     setUseEnhanced(false)
     try {
       const base64 = await fileToBase64(image)
-      const result = await analyzeWithGemini(base64, image.type, geminiKey)
+      const result = await analyzeWithGemini(base64, image.type)
       setAnalysis(result)
 
       // Generate enhanced first frame, then alt angle using the enhanced image
       setGeneratingEnhanced(true)
       if (result.alternate_angle) setGeneratingAltImage(true)
-      geminiGenerateImage(base64, image.type, buildEnhancePrompt(result, tone, audience), geminiKey)
+      geminiGenerateImage(base64, image.type, buildEnhancePrompt(result, tone, audience))
         .then((enhImg) => {
           if (enhImg) { setEnhancedImage(enhImg); setUseEnhanced(true) }
           setGeneratingEnhanced(false)
           if (result.alternate_angle) {
             const altMime = enhImg ? 'image/png' : image.type
             const altBase64 = enhImg ? enhImg.split(',')[1] : base64
-            geminiGenerateImage(altBase64, altMime, buildAltAnglePrompt(result, !!enhImg, tone, audience), geminiKey)
+            geminiGenerateImage(altBase64, altMime, buildAltAnglePrompt(result, !!enhImg, tone, audience))
               .then((img) => setAltAngleImage(img))
               .finally(() => setGeneratingAltImage(false))
           }
@@ -307,20 +298,20 @@ export default function App() {
     setUseEnhanced(false)
     try {
       const base64 = await fileToBase64(file)
-      const result = await analyzeWithGemini(base64, file.type, geminiKey)
+      const result = await analyzeWithGemini(base64, file.type)
       setAnalysis(result)
 
       // Generate enhanced first frame, then alt angle using the enhanced image
       setGeneratingEnhanced(true)
       if (result.alternate_angle) setGeneratingAltImage(true)
-      geminiGenerateImage(base64, file.type, buildEnhancePrompt(result, tone, audience), geminiKey)
+      geminiGenerateImage(base64, file.type, buildEnhancePrompt(result, tone, audience))
         .then((enhImg) => {
           if (enhImg) { setEnhancedImage(enhImg); setUseEnhanced(true) }
           setGeneratingEnhanced(false)
           if (result.alternate_angle) {
             const altMime = enhImg ? 'image/png' : file.type
             const altBase64 = enhImg ? enhImg.split(',')[1] : base64
-            geminiGenerateImage(altBase64, altMime, buildAltAnglePrompt(result, !!enhImg, tone, audience), geminiKey)
+            geminiGenerateImage(altBase64, altMime, buildAltAnglePrompt(result, !!enhImg, tone, audience))
               .then((img) => setAltAngleImage(img))
               .finally(() => setGeneratingAltImage(false))
           }
@@ -377,10 +368,9 @@ export default function App() {
       setStatus('generating')
       startProgressAnimation()
 
-      const res = await fetch(`${LTX_API_BASE}/image-to-video`, {
+      const res = await fetch('/api/ltx', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${ltxKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -435,12 +425,8 @@ export default function App() {
     stopProgressAnimation()
   }
 
-  const saveLtxKey = (key: string) => { setLtxKey(key); localStorage.setItem('adforge_ltx_key', key) }
-  const saveGeminiKey = (key: string) => { setGeminiKey(key); localStorage.setItem('adforge_gemini_key', key) }
-  const hasKeys = ltxKey.trim() && geminiKey.trim()
-
   const isGenerating = status === 'uploading' || status === 'generating' || status === 'polling'
-  const canGenerate = image && audience.trim() && !isGenerating && hasKeys
+  const canGenerate = image && audience.trim() && !isGenerating
 
   return (
     <div className="min-h-screen bg-gray-950 text-white font-sans">
@@ -456,45 +442,7 @@ export default function App() {
               LTX-2 + Gemini Vision
             </span>
           </div>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`text-xs px-3 py-1.5 rounded-lg border transition-all ${
-              hasKeys
-                ? 'border-gray-700 text-gray-500 hover:text-gray-300 hover:border-gray-500'
-                : 'border-amber-500 bg-amber-500/10 text-amber-400 animate-pulse'
-            }`}
-          >
-            {hasKeys ? 'API Keys' : 'Set API Keys'}
-          </button>
         </div>
-        {(showSettings || !hasKeys) && (
-          <div className="max-w-4xl mx-auto mt-4 bg-gray-900 border border-gray-800 rounded-xl p-4 space-y-3">
-            {!hasKeys && (
-              <p className="text-sm text-amber-400">Enter your API keys to get started.</p>
-            )}
-            <div>
-              <label className="block text-[10px] text-gray-500 uppercase tracking-wider mb-1">LTX Video API Key</label>
-              <input
-                type="password"
-                value={ltxKey}
-                onChange={(e) => saveLtxKey(e.target.value)}
-                placeholder="ltxv_..."
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] text-gray-500 uppercase tracking-wider mb-1">Gemini API Key</label>
-              <input
-                type="password"
-                value={geminiKey}
-                onChange={(e) => saveGeminiKey(e.target.value)}
-                placeholder="AIza..."
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono"
-              />
-            </div>
-            <p className="text-[10px] text-gray-600">Keys are saved in your browser's localStorage — never sent to our servers.</p>
-          </div>
-        )}
       </header>
 
       <main className="max-w-4xl mx-auto px-6 py-12">
