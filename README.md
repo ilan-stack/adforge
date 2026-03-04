@@ -37,18 +37,18 @@ AdForge chains three AI models together to go from a single product photo to a p
 - Gemini API (Vision + Image Generation)
 - LTX Video API by Lightricks
 
-## Getting Started
+## Try It
+
+Visit the [live demo](https://adforge-three.vercel.app) — API keys are pre-configured, just upload a product image and go.
+
+## Run Locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open [localhost:5173](http://localhost:5173) and enter your API keys:
-- **LTX Video API Key** — from [LTX Video](https://app.ltx.video/)
-- **Gemini API Key** — from [Google AI Studio](https://aistudio.google.com/apikey)
-
-Keys are stored in your browser's localStorage and never leave your machine.
+Open [localhost:5173](http://localhost:5173). API keys are included for demo purposes. To use your own, click "API Keys" in the header.
 
 ## Architecture
 

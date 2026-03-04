@@ -3,6 +3,12 @@ import './index.css'
 
 const LTX_API_BASE = '/api'
 
+// Demo keys — expire March 11 2026
+const DEMO_EXPIRES = new Date('2026-03-12T00:00:00Z').getTime()
+const isDemoActive = () => Date.now() < DEMO_EXPIRES
+const DEMO_LTX_KEY = 'ltxv_cPkaalzltl1YGgYXiU7twVk7mivT8Y-UcwTmkxrTDSbCbqVs-6ILYctTXXHPlW4496kd7zKdBPGBBRhyKQQcZit6DTLbyN57b7pGTajr_hGuGrXX7kgfwbVdUb_LkuTNBV76jxEITTp317zTsOxb4T2GeFE_pNfccU7dMDPmvW-Sk7s'
+const DEMO_GEMINI_KEY = 'AIzaSyB51P_ZpBrFsCXBUpPtY1sH_7qsTWjXqfo'
+
 type Tone = 'fun' | 'premium' | 'urgent'
 type Status = 'idle' | 'uploading' | 'generating' | 'polling' | 'done' | 'error'
 
@@ -181,8 +187,8 @@ function buildFallbackPrompt(audience: string, tone: Tone): string {
 }
 
 export default function App() {
-  const [ltxKey, setLtxKey] = useState(() => localStorage.getItem('adforge_ltx_key') || '')
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('adforge_gemini_key') || '')
+  const [ltxKey, setLtxKey] = useState(() => localStorage.getItem('adforge_ltx_key') || (isDemoActive() ? DEMO_LTX_KEY : ''))
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('adforge_gemini_key') || (isDemoActive() ? DEMO_GEMINI_KEY : ''))
   const [showSettings, setShowSettings] = useState(false)
   const [image, setImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
